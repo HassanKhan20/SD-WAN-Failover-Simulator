@@ -4,8 +4,9 @@ A two-site company network in Docker with two independent WAN paths between
 the sites. Python agents on each edge router probe both paths continuously,
 stream round-trip time, jitter, packet loss and throughput into SQLite, flag a
 degraded path from that telemetry, and move the kernel route to the healthy
-path automatically. Measured failover time is **3.4 seconds** from injecting
-40 % packet loss to the route change, and application traffic keeps flowing.
+path automatically. Failover takes **3 to 5 seconds** from injecting 40 %
+packet loss to the route change (3.4 s in the recorded run below), and
+application traffic keeps flowing.
 
 ```
  hq_lan 10.1.0.0/24                                    branch_lan 10.2.0.0/24
@@ -109,9 +110,14 @@ back. A 5 s dwell after any switch prevents flapping. If every path is
 degraded it stays put and logs `ALL_DEGRADED` once. Both edges run this
 independently and converge because they observe the same round trips.
 
-**Timing budget.** The first fully bad window is summarized at most 1.5 s
-after loss starts, the third at most 3.5 s, and the route change is
-immediate. The end-to-end test measured 3.4 s.
+**Timing budget.** Each one-second sample covers probes sent between 1.5 s
+and 0.5 s earlier, so the first sample that lies entirely inside the bad
+period is written at most 2.5 s after loss starts and the third at most
+4.5 s. The route change is immediate. With random 40 % loss, about one
+window in eight happens to see no loss and counts as clean, so detection
+occasionally needs an extra second: across simulated runs the median is
+about 3.6 s and nine runs in ten finish under 5 s. Full loss or added delay
+detects in the fixed 4.5 s bound. The recorded end-to-end run measured 3.4 s.
 
 **Storage.** One SQLite file in WAL mode on a shared Docker volume, written
 by both agents and the traffic client and read by the monitor. Tables:

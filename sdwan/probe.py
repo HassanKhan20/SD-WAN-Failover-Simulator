@@ -85,14 +85,14 @@ class EchoResponder(threading.Thread):
 
     def __init__(self, port: int, bind_ip: str = "0.0.0.0"):
         super().__init__(name=f"echo:{port}", daemon=True)
-        self._stop = threading.Event()
+        self._halt = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((bind_ip, port))
         self.sock.settimeout(_SOCKET_POLL_S)
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             try:
                 data, addr = self.sock.recvfrom(1024)
                 self.sock.sendto(data, addr)
@@ -103,7 +103,7 @@ class EchoResponder(threading.Thread):
         self.sock.close()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
         self.join(timeout=2)
 
 
@@ -122,7 +122,7 @@ class Prober:
         self.clock_ns = clock_ns
         self._records: dict[int, ProbeRecord] = {}
         self._lock = threading.Lock()
-        self._stop = threading.Event()
+        self._halt = threading.Event()
         self._seq = 0
         self._sock: socket.socket | None = None
         self._threads: list[threading.Thread] = []
@@ -139,7 +139,7 @@ class Prober:
             t.start()
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
         for t in self._threads:
             t.join(timeout=2)
         if self._sock is not None:
@@ -158,7 +158,7 @@ class Prober:
     def _send_loop(self) -> None:
         interval = self.cfg.interval_ms / 1000
         target = (self.path.peer_ip, self.cfg.echo_port)
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             self._seq += 1
             send_ns = self.clock_ns()
             with self._lock:
@@ -167,10 +167,10 @@ class Prober:
                 self._sock.sendto(_PACKET.pack(self._seq, send_ns), target)
             except OSError:
                 pass  # stays recorded as sent and unanswered: a loss
-            self._stop.wait(interval)
+            self._halt.wait(interval)
 
     def _recv_loop(self) -> None:
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             try:
                 data, _ = self._sock.recvfrom(1024)
             except socket.timeout:
@@ -212,7 +212,7 @@ class ThroughputSink(threading.Thread):
     def __init__(self, port: int, nbytes: int, bind_ip: str = "0.0.0.0"):
         super().__init__(name=f"tp-sink:{port}", daemon=True)
         self.nbytes = nbytes
-        self._stop = threading.Event()
+        self._halt = threading.Event()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind((bind_ip, port))
@@ -220,7 +220,7 @@ class ThroughputSink(threading.Thread):
         self.sock.settimeout(_SOCKET_POLL_S)
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             try:
                 conn, _ = self.sock.accept()
             except socket.timeout:
@@ -245,7 +245,7 @@ class ThroughputSink(threading.Thread):
                 return
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
         self.join(timeout=2)
 
 
@@ -277,12 +277,12 @@ class ThroughputLoop(threading.Thread):
         super().__init__(name=f"tp-loop:{path.name}", daemon=True)
         self.path = path
         self.cfg = cfg
-        self._stop = threading.Event()
+        self._halt = threading.Event()
         self._lock = threading.Lock()
         self._latest: float | None = None
 
     def run(self) -> None:
-        while not self._stop.is_set():
+        while not self._halt.is_set():
             mbps = measure_throughput(
                 self.path.local_ip,
                 self.path.peer_ip,
@@ -291,7 +291,7 @@ class ThroughputLoop(threading.Thread):
             )
             with self._lock:
                 self._latest = mbps
-            self._stop.wait(self.cfg.throughput_interval_s)
+            self._halt.wait(self.cfg.throughput_interval_s)
 
     def take(self) -> float | None:
         with self._lock:
@@ -299,5 +299,5 @@ class ThroughputLoop(threading.Thread):
         return value
 
     def stop(self) -> None:
-        self._stop.set()
+        self._halt.set()
         self.join(timeout=5)

@@ -108,6 +108,20 @@ def test_throughput_against_closed_port_is_zero():
     assert measure_throughput("127.0.0.1", "127.0.0.1", free_tcp_port(), 1024, timeout=0.5) == 0.0
 
 
+def test_helper_threads_do_not_shadow_thread_stop_method():
+    # Python < 3.13 calls Thread._stop() from join() and is_alive(); an
+    # instance attribute named _stop makes stop() raise TypeError there.
+    helpers = [
+        EchoResponder(free_udp_port(), bind_ip="127.0.0.1"),
+        ThroughputSink(free_tcp_port(), nbytes=1, bind_ip="127.0.0.1"),
+        ThroughputLoop(LOOP, cfg(free_udp_port())),
+    ]
+    for h in helpers:
+        assert "_stop" not in vars(h), type(h).__name__
+        if hasattr(h, "sock"):
+            h.sock.close()
+
+
 def test_throughput_loop_take_returns_fresh_value_once():
     port = free_tcp_port()
     sink = ThroughputSink(port, nbytes=65536, bind_ip="127.0.0.1")

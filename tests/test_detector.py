@@ -134,6 +134,30 @@ def test_throughput_drop_below_ratio_is_bad():
     assert "throughput 100.0Mbps" in healths[-1].reason
 
 
+def bursty(i, tp_when_measured, every=5):
+    """Sample stream shaped like the real agent: a burst result only every
+    `every` samples, None in between."""
+    return sample(i, tp=tp_when_measured if i % every == 0 else None)
+
+
+def test_repeated_low_bursts_alone_degrade_the_path():
+    mon = PathMonitor(CFG)
+    feed(mon, [bursty(i, 800.0) for i in range(20)])
+    assert mon.status is Status.HEALTHY
+    healths = feed(mon, [bursty(i, 5.0) for i in range(20, 30)])
+    assert healths[-1].status is Status.DEGRADED
+    assert "throughput 5.0Mbps" in healths[-1].reason
+
+
+def test_good_burst_clears_sticky_throughput_verdict():
+    mon = PathMonitor(CFG)
+    feed(mon, [bursty(i, 800.0) for i in range(20)])
+    feed(mon, [bursty(i, 5.0) for i in range(20, 30)])
+    assert mon.status is Status.DEGRADED
+    healths = feed(mon, [bursty(i, 800.0) for i in range(30, 45)])
+    assert healths[-1].status is Status.HEALTHY
+
+
 def test_throughput_without_baseline_is_ignored():
     mon = PathMonitor(CFG)
     healths = feed(mon, [sample(i, tp=0.0) for i in range(3)])

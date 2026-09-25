@@ -61,6 +61,7 @@ class PathMonitor:
         self.consecutive_clean = 0
         self.status = Status.UNKNOWN
         self.reason = ""
+        self._tp_reason: str | None = None
 
     @property
     def baseline_rtt_ms(self) -> float | None:
@@ -88,16 +89,19 @@ class PathMonitor:
                 )
         if s.jitter_ms is not None and s.jitter_ms > cfg.jitter_ms_max:
             reasons.append(f"jitter {s.jitter_ms:.1f}ms > {cfg.jitter_ms_max:.1f}ms")
-        base_tp = self.throughput.mean
-        if (
-            s.throughput_mbps is not None
-            and base_tp is not None
-            and s.throughput_mbps < cfg.throughput_drop_ratio * base_tp
-        ):
-            reasons.append(
-                f"throughput {s.throughput_mbps:.1f}Mbps < "
-                f"{cfg.throughput_drop_ratio * 100:.0f}% of baseline {base_tp:.1f}Mbps"
-            )
+        # Bursts arrive only every few samples, so a throughput verdict
+        # sticks until the next burst replaces it. Otherwise a slow path could
+        # never reach bad_needed of window on throughput alone.
+        if s.throughput_mbps is not None:
+            base_tp = self.throughput.mean
+            self._tp_reason = None
+            if base_tp is not None and s.throughput_mbps < cfg.throughput_drop_ratio * base_tp:
+                self._tp_reason = (
+                    f"throughput {s.throughput_mbps:.1f}Mbps < "
+                    f"{cfg.throughput_drop_ratio * 100:.0f}% of baseline {base_tp:.1f}Mbps"
+                )
+        if self._tp_reason:
+            reasons.append(self._tp_reason)
         return reasons
 
     def _learn(self, s: Sample) -> None:

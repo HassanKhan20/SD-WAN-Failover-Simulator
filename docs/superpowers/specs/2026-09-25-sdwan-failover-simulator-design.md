@@ -425,11 +425,16 @@ because the whole design depends on it.
 
 ## 15. Timing budget
 
-Degradation starts at `t0`. The first fully bad window is summarized at
-most 1.5 s later. Three bad windows out of five are reached at most 3.5 s
-after `t0`. The route change is immediate. Expected failover time is
-3 to 4 s, under the 5 s claim. Failback after `restore` takes
-`recover_needed` seconds plus `failback_hold_s`, roughly 25 s, which is
+Degradation starts at `t0`. A sample at tick `T` covers `(T - 1.5 s, T - 0.5 s]`,
+so the first window entirely inside the bad period is summarized at most
+2.5 s after `t0` and the third at most 4.5 s after `t0` (corrected during
+review; the original text said 1.5 s and 3.5 s). The route change is
+immediate. For full loss or added delay every window is bad and failover
+completes within 4.5 s. For random partial loss some windows happen to be
+clean (at 40 % loss with 4 probes, about 13 %), so detection occasionally
+needs an extra window: simulated median 3.6 s, 90th percentile under 5 s.
+The README states the range, not a single figure. Failback after `restore`
+takes `recover_needed` seconds plus `failback_hold_s`, roughly 25 s, which is
 intentional damping against flapping.
 
 ## 16. Testing
