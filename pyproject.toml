@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdwan-failover-simulator"
+version = "0.1.0"
+description = "Two-site SD-WAN failover simulator: Python probes, SQLite telemetry, anomaly detection and automatic path failover in Docker"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["rich>=13"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+sdwan = "sdwan.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["sdwan*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

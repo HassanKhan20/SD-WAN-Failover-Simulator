@@ -1,0 +1,56 @@
+# SD-WAN Failover Simulator topology and tunables.
+# Every address here must match the IPAM settings in docker-compose.yml.
+
+[sites.hq]
+lan = "10.1.0.0/24"
+edge_lan_ip = "10.1.0.2"
+app_ip = "10.1.0.10"
+peer = "branch"
+
+[sites.hq.paths.wan_a]
+local_ip = "10.100.0.11"
+peer_ip = "10.100.0.12"
+
+[sites.hq.paths.wan_b]
+local_ip = "10.200.0.11"
+peer_ip = "10.200.0.12"
+
+[sites.branch]
+lan = "10.2.0.0/24"
+edge_lan_ip = "10.2.0.2"
+app_ip = "10.2.0.10"
+peer = "hq"
+
+[sites.branch.paths.wan_a]
+local_ip = "10.100.0.12"
+peer_ip = "10.100.0.11"
+
+[sites.branch.paths.wan_b]
+local_ip = "10.200.0.12"
+peer_ip = "10.200.0.11"
+
+[probe]
+interval_ms = 250
+timeout_ms = 500
+echo_port = 5001
+throughput_port = 5002
+throughput_interval_s = 5
+throughput_bytes = 262144
+
+[detector]
+window = 5
+bad_needed = 3
+recover_needed = 10
+warmup_samples = 10
+ewma_alpha = 0.1
+loss_pct_max = 10.0
+rtt_ms_max = 250.0
+jitter_ms_max = 50.0
+zscore_max = 3.0
+min_std_ms = 2.0
+throughput_drop_ratio = 0.25
+
+[failover]
+preferred = "wan_a"
+min_dwell_s = 5
+failback_hold_s = 15
