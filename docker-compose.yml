@@ -1,0 +1,102 @@
+# Two sites, two WAN paths. Addresses must match config/topology.toml.
+#
+#  hq_lan 10.1.0.0/24                                    branch_lan 10.2.0.0/24
+#  hq-app .10 --- hq-edge .2 ==[wan_a 10.100.0.0/24]== branch-edge .2 --- branch-app .10
+#                            ==[wan_b 10.200.0.0/24]==
+
+name: sdwan
+
+x-edge: &edge
+  image: sdwan-sim
+  command: ["agent"]
+  cap_add: [NET_ADMIN]
+  sysctls:
+    net.ipv4.ip_forward: 1
+    net.ipv4.conf.all.rp_filter: 0
+    net.ipv4.conf.default.rp_filter: 0
+  volumes:
+    - telemetry:/data
+  restart: unless-stopped
+
+services:
+  hq-edge:
+    <<: *edge
+    build: .
+    environment:
+      SDWAN_SITE: hq
+    networks:
+      hq_lan:
+        ipv4_address: 10.1.0.2
+      wan_a:
+        ipv4_address: 10.100.0.11
+      wan_b:
+        ipv4_address: 10.200.0.11
+
+  branch-edge:
+    <<: *edge
+    environment:
+      SDWAN_SITE: branch
+    networks:
+      branch_lan:
+        ipv4_address: 10.2.0.2
+      wan_a:
+        ipv4_address: 10.100.0.12
+      wan_b:
+        ipv4_address: 10.200.0.12
+
+  hq-app:
+    image: sdwan-sim
+    depends_on: [hq-edge, branch-app]
+    cap_add: [NET_ADMIN]
+    entrypoint: ["sh", "-c"]
+    command:
+      - ip route add 10.2.0.0/24 via 10.1.0.2 && exec sdwan traffic client --target 10.2.0.10 --site hq
+    networks:
+      hq_lan:
+        ipv4_address: 10.1.0.10
+    volumes:
+      - telemetry:/data
+    restart: unless-stopped
+
+  branch-app:
+    image: sdwan-sim
+    depends_on: [branch-edge]
+    cap_add: [NET_ADMIN]
+    entrypoint: ["sh", "-c"]
+    command:
+      - ip route add 10.1.0.0/24 via 10.2.0.2 && exec sdwan traffic server
+    networks:
+      branch_lan:
+        ipv4_address: 10.2.0.10
+    restart: unless-stopped
+
+  monitor:
+    image: sdwan-sim
+    profiles: [tools]
+    command: ["monitor"]
+    tty: true
+    stdin_open: true
+    network_mode: none
+    volumes:
+      - telemetry:/data
+
+networks:
+  hq_lan:
+    ipam:
+      config:
+        - subnet: 10.1.0.0/24
+  branch_lan:
+    ipam:
+      config:
+        - subnet: 10.2.0.0/24
+  wan_a:
+    ipam:
+      config:
+        - subnet: 10.100.0.0/24
+  wan_b:
+    ipam:
+      config:
+        - subnet: 10.200.0.0/24
+
+volumes:
+  telemetry: {}
